@@ -1,4 +1,4 @@
-# Project-AI
+#### Project-AI
 TRAINYOLO
 !pip install ultralytics
 
@@ -20,8 +20,6 @@ names:
 
   TRAIN
 from ultralytics import YOLO
-
-# Load YOLOv8 model (n = nhỏ, s = vừa, m/l/x = lớn hơn)
 model = YOLO("yolov8n.pt")
 
 # Train
@@ -34,7 +32,8 @@ model.train(
     project="/content/runs",
     device=0  
 
-Train CNN:
+
+####Train CNN:
 import cv2
 import numpy as np
 import tensorflow as tf
@@ -121,7 +120,7 @@ from IPython.display import FileLink
 FileLink(model_path)
 
 
-CHẠY CODE DỰ ĐOÁN 
+#####CHẠY CODE DỰ ĐOÁN 
 !pip install ultralytics tensorflow gradio opencv-python
 !pip install gradio
 CODE DỰ ĐOÁN
@@ -217,10 +216,11 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
             total_cost = gr.Textbox(label="💰 Tổng tiền")
 
     btn.click(fn=detect_and_classify, inputs=image_input, outputs=[image_output, food_list, total_cost])
-
 # Chạy ứng dụng
 demo.launch()
 
 
 LINK TẢI YOLO: https://drive.google.com/file/d/1JEridz0WfOPmWWA6Q4PczaQd4_41YNHT/view?usp=drive_link
+
+
 LINK TẢI CNN: https://drive.google.com/file/d/1rHIIPs2_TLxXr0mLFR3Dhl-eY-xRWUjc/view?usp=drive_link
