@@ -1,0 +1,29 @@
+!pip install ultralytics
+path: /content/dataset  # đường dẫn gốc
+train: images/train
+val: images/val
+
+names:
+  0: "Ca hu kho"
+  1: "Canh cai"
+  2: "Canh chua"
+  3: "Com trang"
+  4: "Dau hu sot ca"
+  5: "Ga chien"
+  6: "Rau muong xao"
+  7: "Thit kho"
+  8: "Thit kho trung"
+  9: "Trung chien"
+from ultralytics import YOLO
+model = YOLO("yolov8n.pt")
+
+# Train
+model.train(
+    data="/content/dataset/data.yaml",  # đường dẫn tới file YAML
+    epochs=50,
+    imgsz=640,
+    batch=16,
+    name="canteen_yolo",
+    project="/content/runs",
+    device=0  # hoặc 'cpu' nếu không dùng GPU
+)
