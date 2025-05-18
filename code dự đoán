@@ -3,8 +3,7 @@ LINK TẢI model YOLO: https://drive.google.com/file/d/1JEridz0WfOPmWWA6Q4PczaQd
 
 LINK TẢI model CNN: https://drive.google.com/file/d/14ZnRULy6y1a4LyDObOe3CyeaEVBhmL3A/view?usp=sharing
 -Thư viện cần tải
-!pip install ultralytics tensorflow gradio opencv-python
-!pip install gradio
+pip install ultralytics tensorflow pillow opencv-python numpy
 
 -CODE DỰ ĐOÁN
 import tkinter as tk
@@ -77,7 +76,7 @@ def show_result(image_path):
     img_annotated, preds = detect_and_classify(image_path)
     img_display = cv2.cvtColor(img_annotated, cv2.COLOR_BGR2RGB)
     img_pil = Image.fromarray(img_display)
-    img_pil = img_pil.resize((500, 400))
+    img_pil = img_pil.resize((400, 300)) # Giảm kích thước hiển thị
     img_tk = ImageTk.PhotoImage(img_pil)
     image_label.config(image=img_tk)
     image_label.image = img_tk
@@ -97,6 +96,12 @@ def show_result(image_path):
         total += price * count
 
     result_text.insert(tk.END, f"\n👉 Tổng tiền: {total:,} đ")
+
+    # ➕ Ghi log món ăn
+    with open("log.txt", "a", encoding="utf-8") as f:
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for food in preds:
+            f.write(f"{timestamp},{food}\n")
 
 cap = None
 webcam_running = False
@@ -122,7 +127,7 @@ def start_webcam():
                 break
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(frame_rgb)
-            img = img.resize((500, 400))
+            img = img.resize((400, 300)) # Giảm kích thước hiển thị
             imgtk = ImageTk.PhotoImage(img)
             image_label.imgtk = imgtk
             image_label.configure(image=imgtk)
@@ -158,10 +163,40 @@ def stop_webcam():
     result_text.delete(1.0, tk.END)
     result_text.insert(tk.END, "❌ Webcam đã dừng.")
 
+# ➕ Thống kê món ăn phổ biến trong ngày
+def show_today_stats():
+    result_text.delete(1.0, tk.END)
+    if not os.path.exists("log.txt"):
+        result_text.insert(tk.END, "⚠️ Chưa có dữ liệu thống kê.")
+        return
+
+    today = datetime.datetime.now().strftime("%Y-%m-%d")
+    food_counter = {}
+
+    with open("log.txt", "r", encoding="utf-8") as f:
+        for line in f:
+            if line.startswith(today):
+                parts = line.strip().split(",")
+                if len(parts) == 2:
+                    _, food = parts
+                    food_counter[food] = food_counter.get(food, 0) + 1
+
+    if not food_counter:
+        result_text.insert(tk.END, "📅 Hôm nay chưa có món ăn nào được nhận diện.")
+        return
+
+    sorted_foods = sorted(food_counter.items(), key=lambda x: x[1], reverse=True)
+    result_text.insert(tk.END, f"📊 Thống kê món ăn phổ biến ({today}):\n\n")
+    for food, count in sorted_foods:
+        result_text.insert(tk.END, f"• {food}: {count} phần\n")
+
+    most_common = sorted_foods[0]
+    result_text.insert(tk.END, f"\n🏆 Món ăn phổ biến nhất hôm nay: {most_common[0]} ({most_common[1]} phần)")
+
 # ======= GUI =======
 root = tk.Tk()
 root.title("🧠 Nhận diện món ăn canteen (YOLO + Keras)")
-root.geometry("760x820")
+root.geometry("1200x600") # Tăng chiều rộng cửa sổ
 root.configure(bg="#f0f4f8")
 
 def on_enter(e):
@@ -171,52 +206,67 @@ def on_leave(e):
     e.widget['background'] = '#3498db'
 
 title = tk.Label(root, text="🍱 Hệ thống nhận diện món ăn canteen", font=("Segoe UI", 24, "bold"),
-                 bg="#f0f4f8", fg="#34495e")
-title.pack(pady=25)
+                    bg="#f0f4f8", fg="#34495e")
+title.grid(row=0, column=0, columnspan=3, pady=25)
 
-btn_frame = tk.Frame(root, bg="#f0f4f8")
-btn_frame.pack(pady=20)
+# --- Cột bên trái (Input) ---
+input_frame = tk.Frame(root, bg="#f0f4f8")
+input_frame.grid(row=1, column=0, padx=20, sticky="n")
 
-btn_style = {
-    "font": ("Segoe UI", 13, "bold"),
-    "padx": 20,
-    "pady": 10,
-    "bd": 0,
-    "relief": "ridge"
-}
+btn_open = tk.Button(input_frame, text="📂 Chọn ảnh từ máy", bg="#27ae60", fg="white",
+                     activebackground="#2ecc71", font=("Segoe UI", 14, "bold"),
+                     padx=20, pady=10, bd=0, relief="ridge", command=open_image)
+btn_open.pack(pady=5, fill="x")
 
-btn_open = tk.Button(btn_frame, text="📂 Chọn ảnh từ máy", bg="#27ae60", fg="white",
-                     activebackground="#2ecc71", command=open_image, **btn_style)
-btn_open.grid(row=0, column=0, padx=12)
+btn_camera_start = tk.Button(input_frame, text="▶️ Bật Webcam", bg="#3498db", fg="white",
+                             activebackground="#5dade2", font=("Segoe UI", 14, "bold"),
+                             padx=20, pady=10, bd=0, relief="ridge", command=start_webcam)
+btn_camera_start.pack(pady=5, fill="x")
+btn_camera_start.bind("<Enter>", on_enter)
+btn_camera_start.bind("<Leave>", on_leave)
 
-btn_camera_start = tk.Button(btn_frame, text="▶️ Bật Webcam", bg="#3498db", fg="white",
-                             activebackground="#5dade2", command=start_webcam, **btn_style)
-btn_camera_start.grid(row=0, column=1, padx=12)
+btn_camera_capture = tk.Button(input_frame, text="📸 Chụp ảnh", bg="#2ecc71", fg="white",
+                                 activebackground="#58d68d", font=("Segoe UI", 14, "bold"),
+                                 padx=20, pady=10, bd=0, relief="ridge", command=capture_webcam_image)
+btn_camera_capture.pack(pady=5, fill="x")
 
-btn_camera_capture = tk.Button(btn_frame, text="📸 Chụp ảnh", bg="#2ecc71", fg="white",
-                               activebackground="#58d68d", command=capture_webcam_image, **btn_style)
-btn_camera_capture.grid(row=0, column=2, padx=12)
+btn_camera_stop = tk.Button(input_frame, text="⏹️ Tắt Webcam", bg="#e74c3c", fg="white",
+                              activebackground="#ec7063", font=("Segoe UI", 14, "bold"),
+                              padx=20, pady=10, bd=0, relief="ridge", command=stop_webcam)
+btn_camera_stop.pack(pady=5, fill="x")
 
-btn_camera_stop = tk.Button(btn_frame, text="⏹️ Tắt Webcam", bg="#e74c3c", fg="white",
-                            activebackground="#ec7063", command=stop_webcam, **btn_style)
-btn_camera_stop.grid(row=0, column=3, padx=12)
+btn_stats = tk.Button(input_frame, text="📊 Thống kê hôm nay", bg="#f39c12", fg="white",
+                      activebackground="#f4d03f", font=("Segoe UI", 12, "bold"),
+                      padx=20, pady=10, bd=0, relief="ridge", command=show_today_stats)
+btn_stats.pack(pady=10, fill="x")
 
+# --- Cột ở giữa (Camera/Ảnh) ---
 image_frame = tk.Frame(root, bg="white", relief="groove", bd=3)
-image_frame.pack(pady=25)
+image_frame.grid(row=1, column=1, padx=20, pady=10)
 
-image_label = tk.Label(image_frame, bg="white", width=500, height=400, relief="sunken", bd=2)
+image_label = tk.Label(image_frame, bg="white", width=400, height=300, relief="sunken", bd=2)
 image_label.pack()
 
-result_container = tk.Frame(root, bg="#f0f4f8")
-result_container.pack(pady=10, fill="both", expand=True)
+# --- Cột bên phải (Output) ---
+output_frame = tk.Frame(root, bg="#f0f4f8")
+output_frame.grid(row=1, column=2, padx=20, sticky="n")
+
+result_label = tk.Label(output_frame, text="📝 Kết quả nhận diện:", font=("Segoe UI", 16, "bold"),
+                        bg="#f0f4f8", fg="#34495e")
+result_label.pack(pady=(0, 5), anchor="w")
+
+result_container = tk.Frame(output_frame, bg="white", relief="ridge", bd=2)
+result_container.pack(pady=5, fill="both", expand=True)
 
 scrollbar = tk.Scrollbar(result_container)
 scrollbar.pack(side="right", fill="y")
 
-result_text = tk.Text(result_container, height=8, font=("Segoe UI", 14), wrap="word",
-                      yscrollcommand=scrollbar.set, bg="white", fg="#2c3e50", bd=2, relief="ridge")
-result_text.pack(fill="both", padx=20, pady=5, expand=True)
+result_text = tk.Text(result_container, height=10, font=("Segoe UI", 14), wrap="word",
+                        yscrollcommand=scrollbar.set, bg="white", fg="#2c3e50")
+result_text.pack(fill="both", padx=10, pady=10, expand=True)
 scrollbar.config(command=result_text.yview)
+
+root.grid_columnconfigure(1, weight=1) # Cho cột giữa (ảnh) có thể giãn nở
 
 root.mainloop()
 
