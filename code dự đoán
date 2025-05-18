@@ -1,7 +1,7 @@
-LINK TẢI model YOLO: https://drive.google.com/file/d/1JEridz0WfOPmWWA6Q4PczaQd4_41YNHT/view?usp=drive_link
+LINK TẢI model YOLO: https://drive.google.com/file/d/1JEridz0WfOPmWWA6Q4PczaQd4_41YNHT/view?usp=sharing
 
 
-LINK TẢI model CNN: https://drive.google.com/file/d/1rHIIPs2_TLxXr0mLFR3Dhl-eY-xRWUjc/view?usp=drive_link
+LINK TẢI model CNN: https://drive.google.com/file/d/14ZnRULy6y1a4LyDObOe3CyeaEVBhmL3A/view?usp=sharing
 -Thư viện cần tải
 !pip install ultralytics tensorflow gradio opencv-python
 !pip install gradio
