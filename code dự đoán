@@ -7,97 +7,216 @@ LINK TẢI model CNN: https://drive.google.com/file/d/14ZnRULy6y1a4LyDObOe3CyeaE
 !pip install gradio
 
 -CODE DỰ ĐOÁN
-import gradio as gr
+import tkinter as tk
+from tkinter import filedialog
+from PIL import Image, ImageTk
 import cv2
-import numpy as np
 from ultralytics import YOLO
+import numpy as np
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.image import img_to_array
-from PIL import Image
+import threading
+import os
+import datetime
 
-yolo_model = YOLO("/content/drive/MyDrive/yolov8n.pt") #model yolo
-
-# Keras .h5 để phân loại món ăn
-classifier_model = load_model("/content/drive/MyDrive/cantin_model.h5") # model CNN
-
-# Danh sách nhãn tương ứng với mô hình classifier
-class_labels = [
-    "Ca hu kho", "Canh cai", "Canh chua", "Com trang", "Dau hu sot ca",
-    "Ga chien", "Rau muong xao", "Thit kho", "Thit kho trung", "Trung chien"
-]
-
-# Bảng giá món ăn
+# Danh sách món ăn và giá
 food_prices = {
-    "Ca hu kho": 10000,
+    "Ca hu kho": 15000,
     "Canh cai": 8000,
-    "Canh chua": 8000,
+    "Canh chua": 10000,
     "Com trang": 5000,
-    "Dau hu sot ca": 7000,
-    "Ga chien": 12000,
-    "Rau muong xao": 6000,
-    "Thit kho": 12000,
-    "Thit kho trung": 14000,
+    "Dau hu sot ca": 12000,
+    "Ga chien": 20000,
+    "Rau muong xao": 8000,
+    "Thit kho": 15000,
+    "Thit kho trung": 20000,
     "Trung chien": 7000
 }
 
-def preprocess_crop(crop_img):
-    img = cv2.resize(crop_img, (128, 128))
-    img = img.astype("float32") / 255.0
-    img = np.expand_dims(img, axis=0)
-    return img
+# Load mô hình YOLO và CNN
+yolo_model = YOLO("yolov8n.pt")
+cnn_model = load_model("CNNAI.h5")
 
-def detect_and_classify(image):
-    results = yolo_model(image)
-    detections = results[0].boxes.data.cpu().numpy()
+# Tạo thư mục lưu ảnh nếu chưa có
+os.makedirs("captured_images", exist_ok=True)
 
-    predicted_classes = []
-    total_price = 0
+def detect_and_classify(image_path):
+    image = cv2.imread(image_path)
+    results = yolo_model(image)[0]
 
-    for det in detections:
-        x1, y1, x2, y2, score, class_id = det
-        if score < 0.3:
-            continue
+    preds = []
+    for box in results.boxes:
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
+        crop = image[y1:y2, x1:x2]
+        crop_resized = cv2.resize(crop, (128, 128))
+        crop_resized = crop_resized.astype("float32") / 255.0
+        crop_resized = img_to_array(crop_resized)
+        crop_resized = np.expand_dims(crop_resized, axis=0)
 
-        crop = image[int(y1):int(y2), int(x1):int(x2)]
-        if crop.size == 0:
-            continue
+        pred = cnn_model.predict(crop_resized, verbose=0)
+        class_idx = np.argmax(pred)
+        class_name = list(food_prices.keys())[class_idx]
+        preds.append(class_name)
 
-        # Tiền xử lý và phân loại bằng CNN
-        input_img = preprocess_crop(crop)
-        preds = classifier_model.predict(input_img)
-        predicted_index = np.argmax(preds[0])
-        predicted_label = class_labels[predicted_index]
+        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(image, class_name, (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-        predicted_classes.append(predicted_label)
-        total_price += food_prices.get(predicted_label, 0)
+    return image, preds
 
-    if not predicted_classes:
-        return image, "<span style='color:red'>Không phát hiện được món ăn!</span>", "0 đ"
+def open_image():
+    file_path = filedialog.askopenfilename()
+    if file_path:
+        show_result(file_path)
 
-    result_html = "".join([
-        f"<li>{label}: {food_prices[label]:,} đ</li>" for label in predicted_classes
-    ])
-    return image, f"<ul>{result_html}</ul>", f"{total_price:,} đ"
+def show_result(image_path):
+    result_text.delete(1.0, tk.END)
+    image_label.config(image=None)
+    image_label.image = None
 
-# === Giao diện Gradio ===
-header = """
-<div style="text-align:center; padding: 20px;">
-    <h1 style="color:#2E8B57">🍱 Nhận Diện Món Ăn & Tính Tiền</h1>
-    <p>Tải ảnh mâm cơm lên để phát hiện và tính giá các món ăn</p>
-</div>
-"""
+    img_annotated, preds = detect_and_classify(image_path)
+    img_display = cv2.cvtColor(img_annotated, cv2.COLOR_BGR2RGB)
+    img_pil = Image.fromarray(img_display)
+    img_pil = img_pil.resize((500, 400))
+    img_tk = ImageTk.PhotoImage(img_pil)
+    image_label.config(image=img_tk)
+    image_label.image = img_tk
 
-with gr.Blocks(theme=gr.themes.Soft()) as demo:
-    gr.HTML(header)
-    with gr.Row():
-        with gr.Column():
-            image_input = gr.Image(type="numpy", label="📷 Ảnh mâm cơm")
-            btn = gr.Button("🔍 Nhận diện & tính tiền")
-        with gr.Column():
-            image_output = gr.Image(type="numpy", label="Ảnh kết quả")
-            food_list = gr.HTML(label="🍽️ Danh sách món ăn")
-            total_cost = gr.Textbox(label="💰 Tổng tiền")
+    if not preds:
+        result_text.insert(tk.END, "❌ Không nhận diện được món ăn.")
+        return
 
-    btn.click(fn=detect_and_classify, inputs=image_input, outputs=[image_output, food_list, total_cost])
-# Chạy ứng dụng
-demo.launch()
+    food_counts = {}
+    for food in preds:
+        food_counts[food] = food_counts.get(food, 0) + 1
+
+    total = 0
+    for food, count in food_counts.items():
+        price = food_prices.get(food, 0)
+        result_text.insert(tk.END, f"• {food} x{count} = {price * count:,} đ\n")
+        total += price * count
+
+    result_text.insert(tk.END, f"\n👉 Tổng tiền: {total:,} đ")
+
+cap = None
+webcam_running = False
+
+def start_webcam():
+    global cap, webcam_running
+    if webcam_running:
+        return
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        result_text.delete(1.0, tk.END)
+        result_text.insert(tk.END, "❌ Không thể mở webcam.")
+        return
+
+    webcam_running = True
+    result_text.delete(1.0, tk.END)
+    result_text.insert(tk.END, "📷 Webcam đang hoạt động. Nhấn 'Chụp ảnh' để chụp.")
+
+    def video_loop():
+        while webcam_running:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(frame_rgb)
+            img = img.resize((500, 400))
+            imgtk = ImageTk.PhotoImage(img)
+            image_label.imgtk = imgtk
+            image_label.configure(image=imgtk)
+
+    threading.Thread(target=video_loop, daemon=True).start()
+
+def capture_webcam_image():
+    global cap, webcam_running
+    if not webcam_running or cap is None:
+        result_text.delete(1.0, tk.END)
+        result_text.insert(tk.END, "❌ Webcam chưa được bật.")
+        return
+    ret, frame = cap.read()
+    if not ret:
+        result_text.delete(1.0, tk.END)
+        result_text.insert(tk.END, "❌ Không thể lấy hình ảnh từ webcam.")
+        return
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    img_path = f"captured_images/captured_{timestamp}.jpg"
+    cv2.imwrite(img_path, frame)
+    result_text.insert(tk.END, f"💾 Đã lưu ảnh: {img_path}\n")
+    show_result(img_path)
+
+def stop_webcam():
+    global cap, webcam_running
+    webcam_running = False
+    if cap is not None:
+        cap.release()
+        cap = None
+    image_label.config(image="")
+    image_label.image = None
+    result_text.delete(1.0, tk.END)
+    result_text.insert(tk.END, "❌ Webcam đã dừng.")
+
+# ======= GUI =======
+root = tk.Tk()
+root.title("🧠 Nhận diện món ăn canteen (YOLO + Keras)")
+root.geometry("760x820")
+root.configure(bg="#f0f4f8")
+
+def on_enter(e):
+    e.widget['background'] = '#5dade2'
+
+def on_leave(e):
+    e.widget['background'] = '#3498db'
+
+title = tk.Label(root, text="🍱 Hệ thống nhận diện món ăn canteen", font=("Segoe UI", 24, "bold"),
+                 bg="#f0f4f8", fg="#34495e")
+title.pack(pady=25)
+
+btn_frame = tk.Frame(root, bg="#f0f4f8")
+btn_frame.pack(pady=20)
+
+btn_style = {
+    "font": ("Segoe UI", 13, "bold"),
+    "padx": 20,
+    "pady": 10,
+    "bd": 0,
+    "relief": "ridge"
+}
+
+btn_open = tk.Button(btn_frame, text="📂 Chọn ảnh từ máy", bg="#27ae60", fg="white",
+                     activebackground="#2ecc71", command=open_image, **btn_style)
+btn_open.grid(row=0, column=0, padx=12)
+
+btn_camera_start = tk.Button(btn_frame, text="▶️ Bật Webcam", bg="#3498db", fg="white",
+                             activebackground="#5dade2", command=start_webcam, **btn_style)
+btn_camera_start.grid(row=0, column=1, padx=12)
+
+btn_camera_capture = tk.Button(btn_frame, text="📸 Chụp ảnh", bg="#2ecc71", fg="white",
+                               activebackground="#58d68d", command=capture_webcam_image, **btn_style)
+btn_camera_capture.grid(row=0, column=2, padx=12)
+
+btn_camera_stop = tk.Button(btn_frame, text="⏹️ Tắt Webcam", bg="#e74c3c", fg="white",
+                            activebackground="#ec7063", command=stop_webcam, **btn_style)
+btn_camera_stop.grid(row=0, column=3, padx=12)
+
+image_frame = tk.Frame(root, bg="white", relief="groove", bd=3)
+image_frame.pack(pady=25)
+
+image_label = tk.Label(image_frame, bg="white", width=500, height=400, relief="sunken", bd=2)
+image_label.pack()
+
+result_container = tk.Frame(root, bg="#f0f4f8")
+result_container.pack(pady=10, fill="both", expand=True)
+
+scrollbar = tk.Scrollbar(result_container)
+scrollbar.pack(side="right", fill="y")
+
+result_text = tk.Text(result_container, height=8, font=("Segoe UI", 14), wrap="word",
+                      yscrollcommand=scrollbar.set, bg="white", fg="#2c3e50", bd=2, relief="ridge")
+result_text.pack(fill="both", padx=20, pady=5, expand=True)
+scrollbar.config(command=result_text.yview)
+
+root.mainloop()
+
